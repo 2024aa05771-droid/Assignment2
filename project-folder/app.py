@@ -19,7 +19,7 @@ st.title("ML Model Comparison Dashboard")
 # -------------------------------
 # Upload dataset
 # -------------------------------
-uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+uploaded_file = st.file_uploader("mixed_desc.csv", type=["csv"])
 
 if uploaded_file is not None:
 
@@ -40,8 +40,10 @@ if uploaded_file is not None:
         X = df.drop(columns=[target_col])
         y = df[target_col]
 
-        # Cleaning
+        # Convert all to numeric
         X = X.apply(pd.to_numeric, errors='coerce')
+
+        # Handle missing and extreme values
         X = X.replace([np.inf, -np.inf], np.nan)
         X = X.fillna(X.mean())
         X = X.clip(lower=-1e6, upper=1e6)
@@ -58,21 +60,33 @@ if uploaded_file is not None:
         X = X[mask]
         y = y[mask]
 
-        # Split
+        # Check class count
+        if len(np.unique(y)) < 2:
+            st.error("Not enough class diversity after filtering. Need at least 2 classes.")
+            st.stop()
+
+        # Split dataset
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42, stratify=y
         )
 
-        # Scaling
+        # Scaling for distance-based models
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
 
+        # -------------------------------
         # Evaluation Function
+        # -------------------------------
         def evaluate_model(name, model, X_test_input, y_test):
 
             y_pred = model.predict(X_test_input)
-            y_prob = model.predict_proba(X_test_input)
+
+            # Some models may not support predict_proba
+            if hasattr(model, "predict_proba"):
+                y_prob = model.predict_proba(X_test_input)
+            else:
+                y_prob = None
 
             acc = accuracy_score(y_test, y_pred)
             precision = precision_score(y_test, y_pred, average='macro')
@@ -80,15 +94,17 @@ if uploaded_file is not None:
             f1 = f1_score(y_test, y_pred, average='macro')
             mcc = matthews_corrcoef(y_test, y_pred)
 
-            test_classes = np.unique(y_test)
-            class_indices = [list(model.classes_).index(c) for c in test_classes]
-            y_prob_filtered = y_prob[:, class_indices]
+            auc = 0
+            if y_prob is not None:
+                test_classes = np.unique(y_test)
+                class_indices = [list(model.classes_).index(c) for c in test_classes]
+                y_prob_filtered = y_prob[:, class_indices]
 
-            if len(test_classes) == 2:
-                auc = roc_auc_score(y_test, y_prob_filtered[:, 1])
-            else:
-                y_test_bin = label_binarize(y_test, classes=test_classes)
-                auc = roc_auc_score(y_test_bin, y_prob_filtered, multi_class='ovr', average='macro')
+                if len(test_classes) == 2:
+                    auc = roc_auc_score(y_test, y_prob_filtered[:, 1])
+                else:
+                    y_test_bin = label_binarize(y_test, classes=test_classes)
+                    auc = roc_auc_score(y_test_bin, y_prob_filtered, multi_class='ovr', average='macro')
 
             return {
                 "Model": name,
@@ -100,6 +116,9 @@ if uploaded_file is not None:
                 "MCC": round(mcc, 4)
             }
 
+        # -------------------------------
+        # Run Models
+        # -------------------------------
         if st.button("Run Models"):
 
             results = []
@@ -129,16 +148,22 @@ if uploaded_file is not None:
             rf.fit(X_train, y_train)
             results.append(evaluate_model("Random Forest", rf, X_test, y_test))
 
-            # Gradient Boosting (XGBoost-like)
+            # Gradient Boosting
             gb = GradientBoostingClassifier(
                 n_estimators=200,
-                learning_rate=0.1,
-                max_depth=3
+                learning_rate=0.1
             )
             gb.fit(X_train, y_train)
             results.append(evaluate_model("Gradient Boosting", gb, X_test, y_test))
 
+            # Create results dataframe
             results_df = pd.DataFrame(results)
 
-            st.write("## Final Model Comparison")
-            st.dataframe(results_df.sort_values(by="Model"))
+            # Display results
+            st.write("##Final Model Comparison")
+            sorted_df = results_df.sort_values(by="F1 Score", ascending=False)
+            st.dataframe(sorted_df)
+
+            # Best Model Highlight
+            best_model = sorted_df.iloc[0]
+            st.success(f"Best Model: {best_model['Model']} with F1 Score = {best_model['F1 Score']}")
