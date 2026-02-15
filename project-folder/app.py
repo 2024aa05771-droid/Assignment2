@@ -129,14 +129,29 @@ if uploaded_file is not None:
             auc = 0
             if y_prob is not None:
                 test_classes = np.unique(y_test)
-                class_indices = [list(model.classes_).index(c) for c in test_classes]
-                y_prob_filtered = y_prob[:, class_indices]
+                model_classes = np.array(getattr(model, "classes_", []))
 
-                if len(test_classes) == 2:
-                    auc = roc_auc_score(y_test, y_prob_filtered[:, 1])
+                # find classes present in both model and test set
+                common_classes = np.intersect1d(model_classes, test_classes)
+
+                if common_classes.size == 0:
+                    auc = 0
                 else:
-                    y_test_bin = label_binarize(y_test, classes=test_classes)
-                    auc = roc_auc_score(y_test_bin, y_prob_filtered, multi_class='ovr', average='macro')
+                    # indices of the common classes in model.classes_
+                    class_indices = [int(np.where(model_classes == c)[0][0]) for c in common_classes]
+                    y_prob_filtered = y_prob[:, class_indices]
+
+                    # binary case: prefer using the positive class probability when available
+                    if len(test_classes) == 2 and np.isin(test_classes, model_classes).all():
+                        pos_label = test_classes[1]
+                        pos_index = int(np.where(model_classes == pos_label)[0][0])
+                        auc = roc_auc_score(y_test, y_prob[:, pos_index])
+                    else:
+                        y_test_bin = label_binarize(y_test, classes=common_classes)
+                        if y_test_bin.shape[1] != y_prob_filtered.shape[1]:
+                            auc = 0
+                        else:
+                            auc = roc_auc_score(y_test_bin, y_prob_filtered, multi_class='ovr', average='macro')
 
             return {
                 "Model": name,
