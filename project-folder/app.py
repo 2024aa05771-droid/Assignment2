@@ -20,7 +20,7 @@ st.title("ML Model Comparison Dashboard")
 # -------------------------------
 # Upload dataset
 # -------------------------------
-uploaded_file = st.file_uploader("mixed_desc.csv", type=["csv"])
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file is not None:
 
@@ -44,21 +44,15 @@ if uploaded_file is not None:
         # Convert all to numeric
         X = X.apply(pd.to_numeric, errors='coerce')
 
-        # Handle missing and extreme values
+        # Handle missing & extreme values
         X = X.replace([np.inf, -np.inf], np.nan)
-
-        # Drop columns that are entirely NaN (no usable numeric data)
         X = X.dropna(axis=1, how='all')
 
-        # If no numeric features remain, stop early
         if X.shape[1] == 0:
             st.error("No numeric features available after preprocessing.")
             st.stop()
 
-        # Fill remaining NaNs with column means, then any leftover with 0
         X = X.fillna(X.mean()).fillna(0)
-
-        # Clip extreme values
         X = X.clip(lower=-1e6, upper=1e6)
 
         # Encode labels
@@ -73,16 +67,17 @@ if uploaded_file is not None:
         X = X[mask]
         y = y[mask]
 
-        # Check class count
         if len(np.unique(y)) < 2:
-            st.error("Not enough class diversity after filtering. Need at least 2 classes.")
+            st.error("Not enough class diversity after filtering.")
             st.stop()
 
-        # Split dataset
+        # -------------------------------
+        # Safe Train-Test Split
+        # -------------------------------
         test_size = 0.2
         n_samples = len(y)
         n_classes = len(np.unique(y))
-        # determine number of test samples (floor for float, direct for int)
+
         if isinstance(test_size, float):
             n_test = int(np.floor(test_size * n_samples))
         else:
@@ -90,19 +85,22 @@ if uploaded_file is not None:
 
         stratify_param = y
         if n_test < n_classes:
-            st.warning(f"Number of classes ({n_classes}) is greater than test set size ({n_test}); disabling stratify to allow split.")
+            st.warning("Too many classes for test size. Using random split.")
             stratify_param = None
 
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42, stratify=stratify_param
+            X, y,
+            test_size=test_size,
+            random_state=42,
+            stratify=stratify_param
         )
 
-        # Scaling for distance-based models
+        # Scaling
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
 
-        # Impute any leftover NaNs after scaling (should be rare)
+        # Impute again (safety)
         imputer = SimpleImputer(strategy='mean')
         X_train_scaled = imputer.fit_transform(X_train_scaled)
         X_test_scaled = imputer.transform(X_test_scaled)
@@ -114,7 +112,6 @@ if uploaded_file is not None:
 
             y_pred = model.predict(X_test_input)
 
-            # Some models may not support predict_proba
             if hasattr(model, "predict_proba"):
                 y_prob = model.predict_proba(X_test_input)
             else:
@@ -128,30 +125,14 @@ if uploaded_file is not None:
 
             auc = 0
             if y_prob is not None:
-                test_classes = np.unique(y_test)
-                model_classes = np.array(getattr(model, "classes_", []))
-
-                # find classes present in both model and test set
-                common_classes = np.intersect1d(model_classes, test_classes)
-
-                if common_classes.size == 0:
-                    auc = 0
-                else:
-                    # indices of the common classes in model.classes_
-                    class_indices = [int(np.where(model_classes == c)[0][0]) for c in common_classes]
-                    y_prob_filtered = y_prob[:, class_indices]
-
-                    # binary case: prefer using the positive class probability when available
-                    if len(test_classes) == 2 and np.isin(test_classes, model_classes).all():
-                        pos_label = test_classes[1]
-                        pos_index = int(np.where(model_classes == pos_label)[0][0])
-                        auc = roc_auc_score(y_test, y_prob[:, pos_index])
+                try:
+                    if len(np.unique(y_test)) == 2:
+                        auc = roc_auc_score(y_test, y_prob[:, 1])
                     else:
-                        y_test_bin = label_binarize(y_test, classes=common_classes)
-                        if y_test_bin.shape[1] != y_prob_filtered.shape[1]:
-                            auc = 0
-                        else:
-                            auc = roc_auc_score(y_test_bin, y_prob_filtered, multi_class='ovr', average='macro')
+                        y_bin = label_binarize(y_test, classes=np.unique(y_test))
+                        auc = roc_auc_score(y_bin, y_prob, multi_class='ovr', average='macro')
+                except:
+                    auc = 0
 
             return {
                 "Model": name,
@@ -196,21 +177,47 @@ if uploaded_file is not None:
             results.append(evaluate_model("Random Forest", rf, X_test, y_test))
 
             # Gradient Boosting
-            gb = GradientBoostingClassifier(
-                n_estimators=200,
-                learning_rate=0.1
-            )
+            gb = GradientBoostingClassifier(n_estimators=200, learning_rate=0.1)
             gb.fit(X_train, y_train)
             results.append(evaluate_model("Gradient Boosting", gb, X_test, y_test))
 
-            # Create results dataframe
+            # Results table
             results_df = pd.DataFrame(results)
 
-            # Display results
             st.write("##Final Model Comparison")
             sorted_df = results_df.sort_values(by="F1 Score", ascending=False)
             st.dataframe(sorted_df)
 
-            # Best Model Highlight
+            # Best model
             best_model = sorted_df.iloc[0]
             st.success(f"Best Model: {best_model['Model']} with F1 Score = {best_model['F1 Score']}")
+
+            # -------------------------------
+            # Model Observations Section
+            # -------------------------------
+            st.write("## Model Observations & Insights")
+
+            observations = {
+                "Logistic Regression":
+                    "Works best for linear relationships. Fast and interpretable but may underperform on complex data.",
+
+                "Decision Tree":
+                    "Captures non-linear patterns but prone to overfitting if tree grows deep.",
+
+                "KNN":
+                    "Works well when similar points are near. Sensitive to scaling and dataset size.",
+
+                "Naive Bayes":
+                    "Fast and good for high-dimensional data but assumes feature independence.",
+
+                "Random Forest":
+                    "Robust ensemble model that reduces overfitting and handles complex patterns well.",
+
+                "Gradient Boosting":
+                    "Boosting model that improves errors iteratively. High performance but needs tuning."
+            }
+
+            for model_name in sorted_df["Model"]:
+                if model_name in observations:
+                    with st.expander(f"🔍 {model_name} - Observation"):
+                        st.write(observations[model_name])
