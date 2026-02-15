@@ -44,7 +44,7 @@ if uploaded_file is not None:
         # Convert all to numeric
         X = X.apply(pd.to_numeric, errors='coerce')
 
-        # Handle missing & extreme values
+        # Handle missing and extreme values
         X = X.replace([np.inf, -np.inf], np.nan)
         X = X.dropna(axis=1, how='all')
 
@@ -184,7 +184,7 @@ if uploaded_file is not None:
             # Results table
             results_df = pd.DataFrame(results)
 
-            st.write("##Final Model Comparison")
+            st.write("## Final Model Comparison")
             sorted_df = results_df.sort_values(by="F1 Score", ascending=False)
             st.dataframe(sorted_df)
 
@@ -193,31 +193,47 @@ if uploaded_file is not None:
             st.success(f"Best Model: {best_model['Model']} with F1 Score = {best_model['F1 Score']}")
 
             # -------------------------------
-            # Model Observations Section
+            # Observations Section
             # -------------------------------
             st.write("## Model Observations & Insights")
 
             observations = {
-                "Logistic Regression":
-                    "Works best for linear relationships. Fast and interpretable but may underperform on complex data.",
-
-                "Decision Tree":
-                    "Captures non-linear patterns but prone to overfitting if tree grows deep.",
-
-                "KNN":
-                    "Works well when similar points are near. Sensitive to scaling and dataset size.",
-
-                "Naive Bayes":
-                    "Fast and good for high-dimensional data but assumes feature independence.",
-
-                "Random Forest":
-                    "Robust ensemble model that reduces overfitting and handles complex patterns well.",
-
-                "Gradient Boosting":
-                    "Boosting model that improves errors iteratively. High performance but needs tuning."
+                "Logistic Regression": "Works best for linear relationships. Fast and interpretable.",
+                "Decision Tree": "Captures non-linear patterns but may overfit.",
+                "KNN": "Sensitive to scaling and dataset size.",
+                "Naive Bayes": "Fast but assumes feature independence.",
+                "Random Forest": "Robust ensemble model with high accuracy.",
+                "Gradient Boosting": "Powerful boosting model with high performance."
             }
 
             for model_name in sorted_df["Model"]:
                 if model_name in observations:
                     with st.expander(f"🔍 {model_name} - Observation"):
                         st.write(observations[model_name])
+
+            # -------------------------------
+            # Assignment Comparison Table
+            # -------------------------------
+            st.write("## ML Model Performance Comparison Table")
+
+            comparison_data = {
+                "ML Model Name": [
+                    "Logistic Regression",
+                    "Decision Tree",
+                    "kNN",
+                    "Naive Bayes",
+                    "Random Forest (Ensemble)",
+                    "XGBoost (Ensemble)"
+                ],
+                "Observation about model performance": [
+                    "Performs well for linear relationships. Fast and interpretable but weak on complex data.",
+                    "Captures non-linear patterns but prone to overfitting.",
+                    "Works well when similar points are near. Sensitive to scaling.",
+                    "Fast and good for high-dimensional data but assumes independence.",
+                    "Robust ensemble model that reduces overfitting and improves accuracy.",
+                    "Powerful boosting model with high accuracy but needs tuning."
+                ]
+            }
+
+            comparison_df = pd.DataFrame(comparison_data)
+            st.table(comparison_df)
