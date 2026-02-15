@@ -56,7 +56,7 @@ if uploaded_file is not None:
         counts = Counter(y)
         valid_classes = [c for c, cnt in counts.items() if cnt > 1]
 
-        mask = [label in valid_classes for label in y]
+        mask = np.array([label in valid_classes for label in y])
         X = X[mask]
         y = y[mask]
 
