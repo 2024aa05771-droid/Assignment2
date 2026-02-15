@@ -4,6 +4,7 @@ import numpy as np
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler, label_binarize
+from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, matthews_corrcoef
 
 from sklearn.linear_model import LogisticRegression
@@ -45,7 +46,19 @@ if uploaded_file is not None:
 
         # Handle missing and extreme values
         X = X.replace([np.inf, -np.inf], np.nan)
-        X = X.fillna(X.mean())
+
+        # Drop columns that are entirely NaN (no usable numeric data)
+        X = X.dropna(axis=1, how='all')
+
+        # If no numeric features remain, stop early
+        if X.shape[1] == 0:
+            st.error("No numeric features available after preprocessing.")
+            st.stop()
+
+        # Fill remaining NaNs with column means, then any leftover with 0
+        X = X.fillna(X.mean()).fillna(0)
+
+        # Clip extreme values
         X = X.clip(lower=-1e6, upper=1e6)
 
         # Encode labels
@@ -88,6 +101,11 @@ if uploaded_file is not None:
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
+
+        # Impute any leftover NaNs after scaling (should be rare)
+        imputer = SimpleImputer(strategy='mean')
+        X_train_scaled = imputer.fit_transform(X_train_scaled)
+        X_test_scaled = imputer.transform(X_test_scaled)
 
         # -------------------------------
         # Evaluation Function
