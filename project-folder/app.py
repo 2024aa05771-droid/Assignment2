@@ -66,8 +66,22 @@ if uploaded_file is not None:
             st.stop()
 
         # Split dataset
+        test_size = 0.2
+        n_samples = len(y)
+        n_classes = len(np.unique(y))
+        # determine number of test samples (floor for float, direct for int)
+        if isinstance(test_size, float):
+            n_test = int(np.floor(test_size * n_samples))
+        else:
+            n_test = int(test_size)
+
+        stratify_param = y
+        if n_test < n_classes:
+            st.warning(f"Number of classes ({n_classes}) is greater than test set size ({n_test}); disabling stratify to allow split.")
+            stratify_param = None
+
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
+            X, y, test_size=test_size, random_state=42, stratify=stratify_param
         )
 
         # Scaling for distance-based models
