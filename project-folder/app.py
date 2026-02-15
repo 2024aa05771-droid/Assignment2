@@ -192,24 +192,7 @@ if uploaded_file is not None:
             best_model = sorted_df.iloc[0]
             st.success(f"Best Model: {best_model['Model']} with F1 Score = {best_model['F1 Score']}")
 
-            # -------------------------------
-            # Observations Section
-            # -------------------------------
-            st.write("## Model Observations & Insights")
-
-            observations = {
-                "Logistic Regression": "Works best for linear relationships. Fast and interpretable.",
-                "Decision Tree": "Captures non-linear patterns but may overfit.",
-                "KNN": "Sensitive to scaling and dataset size.",
-                "Naive Bayes": "Fast but assumes feature independence.",
-                "Random Forest": "Robust ensemble model with high accuracy.",
-                "Gradient Boosting": "Powerful boosting model with high performance."
-            }
-
-            for model_name in sorted_df["Model"]:
-                if model_name in observations:
-                    with st.expander(f"🔍 {model_name} - Observation"):
-                        st.write(observations[model_name])
+            
 
             # -------------------------------
             # Assignment Comparison Table
